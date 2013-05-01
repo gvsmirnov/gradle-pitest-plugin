@@ -1,10 +1,23 @@
 apply plugin: 'groovy'
 apply plugin: 'idea'
-apply plugin: 'maven'
+apply plugin: "maven-publish"
+apply plugin: 'maven-publish-auth'
+
+sourceCompatibility = 1.6
+
+buildscript {
+    repositories {
+        mavenCentral()
+        mavenLocal()
+    }
+    dependencies {
+        classpath 'org.hibernate.build.gradle:gradle-maven-publish-auth:2.0.1'
+    }
+}
 
 repositories {
-    mavenLocal()
     mavenCentral()
+    mavenLocal()
 
     if (project.pitVersion.endsWith('SNAPSHOT')) {
         //This repo is Needed only for PIT SNAPSHOT versions
@@ -32,11 +45,77 @@ idea {
     }
 }
 
-//MZA: To make "gradle install" work with local repo
-uploadArchives {
-    repositories {
-        mavenDeployer {
-            mavenLocal()
+task sourcesJar(type: Jar, dependsOn: classes) {
+    classifier = 'sources'
+    from sourceSets.main.allSource
+}
+
+task javadocJar(type: Jar, dependsOn: javadoc) {
+    classifier = 'javadoc'
+    from javadoc.destinationDir
+}
+
+task groovydocJar(type: Jar, dependsOn: javadocJar) {
+    classifier = 'groovydoc'
+    from groovydoc.outputs.files
+}
+
+artifacts {
+    archives sourcesJar
+    archives javadocJar
+    archives groovydocJar
+}
+
+publishing {
+    publications {
+        mavenOSS(org.gradle.api.publish.maven.MavenPublication) {
+            from components.java
+
+            artifact sourcesJar
+            artifact javadocJar
+            artifact groovydocJar
+
+            pom.withXml {
+                Node root = asNode()
+                root.appendNode('name', 'Gradle plugin for PIT Mutation Testing')
+                root.appendNode('url', 'http://gradle-pitest-plugin.solidsoft.info/')
+
+                def issues = root.appendNode('issueManagement')
+                issues.appendNode('system', 'github')
+                issues.appendNode('url', 'https://github.com/szpak/gradle-pitest-plugin/issues')
+
+                def scm = root.appendNode('scm')
+                scm.appendNode('connection', 'scm:git:git://github.com/szpak/gradle-pitest-plugin.git')
+                scm.appendNode('developerConnection', 'scm:git:git@github.com:szpak/gradle-pitest-plugin.git')
+                scm.appendNode('url', 'https://github.com/szpak/gradle-pitest-plugin')
+
+                def license = root.appendNode('licenses').appendNode('license');
+                license.appendNode('name', 'The Apache Software License, Version 2.0')
+                license.appendNode('url', 'http://www.apache.org/licenses/LICENSE-2.0')
+                license.appendNode('distribution', 'repo')
+
+                def developer = root.appendNode("developers").appendNode("developer")
+                developer.appendNode("id", "szpak")
+                developer.appendNode("name", "Marcin Zajączkowski")
+                developer.appendNode("email", "mszpak ATT wp DOTT pl")
+                developer.appendNode("timezone", "+2")
+                def roles = developer.appendNode("roles")
+                roles.appendNode("role", "founder")
+                roles.appendNode("role", "developer")
+                roles.appendNode("role", "despot")
+            }
+        }
+
+        repositories {
+            maven {
+                if (project.version.endsWith("SNAPSHOT")) {
+                    name = 'sonatype-nexus-snapshots'
+                    url 'https://oss.sonatype.org/content/repositories/snapshots'
+                } else {
+                    name = 'sonatype-nexus-staging'
+                    url 'https://oss.sonatype.org/service/local/staging/deploy/maven2'
+                }
+            }
         }
     }
 }
